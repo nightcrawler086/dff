@@ -6,8 +6,16 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
+	"encoding/hex"
+	"slices"
 )
+
+type File struct {
+	Hash string
+	Path string
+}
+
+var FileList []File
 
 func walker(path string, d os.DirEntry, err error) error {
 	if err != nil {
@@ -23,7 +31,19 @@ func walker(path string, d os.DirEntry, err error) error {
 		if _, err := io.Copy(hash, file); err != nil {
 			fmt.Println(err.Error())
 		}
-		fmt.Println(strings.ToUpper(fmt.Sprintf("%x", hash.Sum(nil))), path)
+		sum := hash.Sum(nil)
+		cf := File{
+			Hash: hex.EncodeToString(sum), 
+			Path: path,
+		}
+		if slices.ContainsFunc(FileList, func(f File) bool {
+			return f.Hash == cf.Hash
+		}) {
+			fmt.Printf("File %s is a duplicate ", cf.Path)
+		} else {
+			FileList = append(FileList, cf)
+		}
+		fmt.Printf("%s --> %s\n", cf.Hash, cf.Path)
 	}
 	return nil
 }
