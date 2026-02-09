@@ -7,9 +7,12 @@ import (
 	"os"
 	"path/filepath"
 	"encoding/hex"
-	"runtime/pprof"
+	"flag"
+	"strings"
 )
 
+// Options
+var hiddenOpt *bool
 
 var FileList = make(map[string]*File)
 
@@ -42,7 +45,13 @@ func walker(path string, d os.DirEntry, err error) error {
 	if err != nil {
 		return err
 	}
+	if d.IsDir() && strings.HasPrefix(d.Name(), ".") && d.Name() != "." &&!*hiddenOpt {
+		return filepath.SkipDir
+	}
 	if !d.IsDir() {
+		if strings.HasPrefix(d.Name(), ".") && !*hiddenOpt {
+			return nil
+		}
 		// Open file
 		// os.Open returns a *os.File (pointer), which is 
 		// essentially a pointer to a read-only file descriptor
@@ -76,11 +85,8 @@ func walker(path string, d os.DirEntry, err error) error {
 }
 
 func main() {
-	//cpuFile, err := os.Create("cpu.prof")
-	//if err != nil {
-	//	panic(err)
-	//}
-	//pprof.StartCPUProfile(cpuFile)
-	//defer pprof.StopCPUProfile()
+	hiddenOpt = flag.Bool("h", false, "Include hidden files")
+	flag.Parse()
+
 	filepath.WalkDir(".", walker)
 }
