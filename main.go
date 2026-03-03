@@ -14,8 +14,9 @@ import (
 )
 
 var (
-	extList   map[string]struct{}
-	debugFlag = flag.Bool("debug", false, "enable debug logging")
+	extList     map[string]struct{}
+	debugFlag   = flag.Bool("debug", false, "enable debug logging")
+	machineFlag = flag.Bool("machine", false, "machine-readable output (tab-separated: hash,dupPath,origPath)")
 )
 
 func debugf(format string, args ...interface{}) {
@@ -66,7 +67,12 @@ func worker(paths <-chan string, fileMap map[string]string, mu *sync.Mutex, wg *
 		mu.Lock()
 		if firstPath, exists := fileMap[hash]; exists {
 			debugf("duplicate detected: %s and %s", path, firstPath)
-			fmt.Printf("File %s is a duplicate of %s\n", path, firstPath)
+			if *machineFlag {
+				// hash, duplicate-path, original-path
+				fmt.Printf("%s\t%s\t%s\n", hash, path, firstPath)
+			} else {
+				fmt.Printf("File %s is a duplicate of %s\n", path, firstPath)
+			}
 		} else {
 			fileMap[hash] = path
 		}
