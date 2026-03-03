@@ -2,52 +2,118 @@ package main
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
+	"flag"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	"encoding/hex"
-	"slices"
+	"runtime"
+	"strings"
+	"sync"
 )
 
-type File struct {
-	Hash string
-	Path string
+var (
+	extList map[string]struct{}
+)
+
+// isMatchingExtension reports whether the file path has one of the wanted extensions.
+func isMatchingExtension(path string, extMap map[string]struct{}) bool {
+	if _, ok := extMap[filepath.Ext(path)]; ok {
+		return true
+	}
+	return false
 }
 
-var FileList []File
-
-func walker(path string, d os.DirEntry, err error) error {
+// hashFile returns the SHA-256 hash of the given file's contents as a hex string.
+func hashFile(path string) (string, error) {
+	file, err := os.Open(path)
 	if err != nil {
-		return err
+		return "", err
 	}
-	if !d.IsDir() {
-		file, err := os.Open(path)
+	defer file.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, file); err != nil {
+		return "", err
+	}
+
+	sum := h.Sum(nil)
+	return hex.EncodeToString(sum), nil
+}
+
+// worker consumes file paths from the channel, hashes them, and reports duplicates.
+func worker(paths <-chan string, fileMap map[string]string, mu *sync.Mutex, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	for path := range paths {
+		hash, err := hashFile(path)
 		if err != nil {
-			fmt.Println(err.Error())
+			fmt.Fprintln(os.Stderr, err.Error())
+			continue
 		}
-		defer file.Close()
-		hash := sha256.New()
-		if _, err := io.Copy(hash, file); err != nil {
-			fmt.Println(err.Error())
-		}
-		sum := hash.Sum(nil)
-		cf := File{
-			Hash: hex.EncodeToString(sum), 
-			Path: path,
-		}
-		if slices.ContainsFunc(FileList, func(f File) bool {
-			return f.Hash == cf.Hash
-		}) {
-			fmt.Printf("File %s is a duplicate ", cf.Path)
+
+		mu.Lock()
+		if firstPath, exists := fileMap[hash]; exists {
+			fmt.Printf("File %s is a duplicate of %s\n", path, firstPath)
 		} else {
-			FileList = append(FileList, cf)
+			fileMap[hash] = path
 		}
-		fmt.Printf("%s --> %s\n", cf.Hash, cf.Path)
+		mu.Unlock()
 	}
-	return nil
 }
 
 func main() {
-	filepath.WalkDir(".", walker)
+	flag.Parse()
+
+	if flag.NArg() < 1 {
+		fmt.Fprintf(os.Stderr, "usage: %s ext1,ext2,ext3\n", os.Args[0])
+		os.Exit(1)
+	}
+
+	// Initialize the extList map
+	extList = make(map[string]struct{})
+
+	extensions := strings.Split(flag.Arg(0), ",")
+	for _, ext := range extensions {
+		if ext == "" {
+			continue
+		}
+		extList[ext] = struct{}{}
+	}
+
+	fileMap := make(map[string]string)
+	var mu sync.Mutex
+
+	paths := make(chan string, 1024)
+
+	// Start a bounded number of workers to hash files concurrently.
+	workerCount := runtime.NumCPU() * 4
+	if workerCount < 1 {
+		workerCount = 1
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(workerCount)
+	for i := 0; i < workerCount; i++ {
+		go worker(paths, fileMap, &mu, &wg)
+	}
+
+	err := filepath.WalkDir(".", func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() && isMatchingExtension(path, extList) {
+			paths <- path
+		}
+		return nil
+	})
+
+	close(paths)
+	wg.Wait()
+
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
+		os.Exit(1)
+	}
 }
