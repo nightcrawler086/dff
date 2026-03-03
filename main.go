@@ -79,8 +79,8 @@ func worker(paths <-chan string, fileMap map[string]string, duplicates *[]duplic
 		if firstPath, exists := fileMap[hash]; exists {
 			debugf("duplicate detected: %s and %s", path, firstPath)
 			if *machineFlag {
-				// hash, duplicate-path, original-path
-				fmt.Printf("%s\t%s\t%s\n", hash, path, firstPath)
+				// padded columns for aligned output: hash, duplicate-path, original-path
+				fmt.Printf("%-64s\t%s\t%s\n", hash, path, firstPath)
 			} else {
 				*duplicates = append(*duplicates, duplicateRecord{
 					Hash:      hash,
@@ -125,6 +125,11 @@ func main() {
 	workerCount := *workersFlag
 	if workerCount <= 0 {
 		workerCount = runtime.NumCPU() // logical CPUs = cores * threads
+	}
+
+	if *machineFlag {
+		// Print header with padded hash column so headings align with values.
+		fmt.Printf("%-64s\t%s\t%s\n", "HASH", "DUPLICATE", "ORIGINAL")
 	}
 
 	var wg sync.WaitGroup
