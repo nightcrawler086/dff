@@ -20,6 +20,12 @@ var (
 	workersFlag = flag.Int("workers", 0, "number of worker goroutines (default: logical CPUs)")
 )
 
+type duplicateRecord struct {
+	Hash      string
+	Duplicate string
+	Original  string
+}
+
 func debugf(format string, args ...interface{}) {
 	if !*debugFlag {
 		return
@@ -57,7 +63,7 @@ func hashFile(path string) (string, error) {
 }
 
 // worker consumes file paths from the channel, hashes them, and reports duplicates.
-func worker(paths <-chan string, fileMap map[string]string, mu *sync.Mutex, wg *sync.WaitGroup) {
+func worker(paths <-chan string, fileMap map[string]string, duplicates *[]duplicateRecord, mu *sync.Mutex, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	for path := range paths {
@@ -76,7 +82,11 @@ func worker(paths <-chan string, fileMap map[string]string, mu *sync.Mutex, wg *
 				// hash, duplicate-path, original-path
 				fmt.Printf("%s\t%s\t%s\n", hash, path, firstPath)
 			} else {
-				fmt.Printf("File %s is a duplicate of %s\n", path, firstPath)
+				*duplicates = append(*duplicates, duplicateRecord{
+					Hash:      hash,
+					Duplicate: path,
+					Original:  firstPath,
+				})
 			}
 		} else {
 			fileMap[hash] = path
@@ -104,7 +114,10 @@ func main() {
 	}
 
 	fileMap := make(map[string]string)
-	var mu sync.Mutex
+	var (
+		mu         sync.Mutex
+		duplicates []duplicateRecord
+	)
 
 	paths := make(chan string, 1024)
 
@@ -118,7 +131,7 @@ func main() {
 	wg.Add(workerCount)
 	debugf("starting %d workers", workerCount)
 	for i := 0; i < workerCount; i++ {
-		go worker(paths, fileMap, &mu, &wg)
+		go worker(paths, fileMap, &duplicates, &mu, &wg)
 	}
 
 	debugf("starting directory walk")
@@ -137,6 +150,17 @@ func main() {
 	wg.Wait()
 
 	debugf("directory walk complete")
+
+	if !*machineFlag {
+		if len(duplicates) == 0 {
+			fmt.Println("No duplicate files found.")
+		} else {
+			fmt.Println("HASH\tDUPLICATE\tORIGINAL")
+			for _, d := range duplicates {
+				fmt.Printf("%s\t%s\t%s\n", d.Hash, d.Duplicate, d.Original)
+			}
+		}
+	}
 
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
