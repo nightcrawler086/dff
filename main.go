@@ -14,8 +14,16 @@ import (
 )
 
 var (
-	extList map[string]struct{}
+	extList   map[string]struct{}
+	debugFlag = flag.Bool("debug", false, "enable debug logging")
 )
+
+func debugf(format string, args ...interface{}) {
+	if !*debugFlag {
+		return
+	}
+	fmt.Fprintf(os.Stderr, "[debug] "+format+"\n", args...)
+}
 
 // isMatchingExtension reports whether the file path has one of the wanted extensions.
 func isMatchingExtension(path string, extMap map[string]struct{}) bool {
@@ -47,6 +55,8 @@ func worker(paths <-chan string, fileMap map[string]string, mu *sync.Mutex, wg *
 	defer wg.Done()
 
 	for path := range paths {
+		debugf("hashing %s", path)
+
 		hash, err := hashFile(path)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err.Error())
@@ -55,6 +65,7 @@ func worker(paths <-chan string, fileMap map[string]string, mu *sync.Mutex, wg *
 
 		mu.Lock()
 		if firstPath, exists := fileMap[hash]; exists {
+			debugf("duplicate detected: %s and %s", path, firstPath)
 			fmt.Printf("File %s is a duplicate of %s\n", path, firstPath)
 		} else {
 			fileMap[hash] = path
@@ -65,6 +76,8 @@ func worker(paths <-chan string, fileMap map[string]string, mu *sync.Mutex, wg *
 
 func main() {
 	flag.Parse()
+
+	debugf("debug logging enabled")
 
 	if flag.NArg() < 1 {
 		fmt.Fprintf(os.Stderr, "usage: %s ext1,ext2,ext3\n", os.Args[0])
@@ -95,15 +108,18 @@ func main() {
 
 	var wg sync.WaitGroup
 	wg.Add(workerCount)
+	debugf("starting %d workers", workerCount)
 	for i := 0; i < workerCount; i++ {
 		go worker(paths, fileMap, &mu, &wg)
 	}
 
+	debugf("starting directory walk")
 	err := filepath.WalkDir(".", func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if !d.IsDir() && isMatchingExtension(path, extList) {
+			debugf("queued %s", path)
 			paths <- path
 		}
 		return nil
@@ -111,6 +127,8 @@ func main() {
 
 	close(paths)
 	wg.Wait()
+
+	debugf("directory walk complete")
 
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
