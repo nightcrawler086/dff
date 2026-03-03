@@ -17,6 +17,7 @@ var (
 	extList     map[string]struct{}
 	debugFlag   = flag.Bool("debug", false, "enable debug logging")
 	machineFlag = flag.Bool("machine", false, "machine-readable output (tab-separated: hash,dupPath,origPath)")
+	workersFlag = flag.Int("workers", 0, "number of worker goroutines (default: logical CPUs)")
 )
 
 func debugf(format string, args ...interface{}) {
@@ -107,9 +108,9 @@ func main() {
 	paths := make(chan string, 1024)
 
 	// Start a bounded number of workers to hash files concurrently.
-	workerCount := runtime.NumCPU() * 4
-	if workerCount < 1 {
-		workerCount = 1
+	workerCount := *workersFlag
+	if workerCount <= 0 {
+		workerCount = runtime.NumCPU() // logical CPUs = cores * threads
 	}
 
 	var wg sync.WaitGroup
