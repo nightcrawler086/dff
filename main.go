@@ -29,6 +29,10 @@ func debugf(format string, args ...interface{}) {
 
 // isMatchingExtension reports whether the file path has one of the wanted extensions.
 func isMatchingExtension(path string, extMap map[string]struct{}) bool {
+	if len(extMap) == 0 {
+		// No extensions specified: match all files.
+		return true
+	}
 	if _, ok := extMap[filepath.Ext(path)]; ok {
 		return true
 	}
@@ -86,20 +90,17 @@ func main() {
 
 	debugf("debug logging enabled")
 
-	if flag.NArg() < 1 {
-		fmt.Fprintf(os.Stderr, "usage: %s ext1,ext2,ext3\n", os.Args[0])
-		os.Exit(1)
-	}
-
 	// Initialize the extList map
 	extList = make(map[string]struct{})
 
-	extensions := strings.Split(flag.Arg(0), ",")
-	for _, ext := range extensions {
-		if ext == "" {
-			continue
+	if flag.NArg() >= 1 {
+		extensions := strings.Split(flag.Arg(0), ",")
+		for _, ext := range extensions {
+			if ext == "" {
+				continue
+			}
+			extList[ext] = struct{}{}
 		}
-		extList[ext] = struct{}{}
 	}
 
 	fileMap := make(map[string]string)
