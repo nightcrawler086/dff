@@ -96,7 +96,6 @@ func worker(paths <-chan string, fileMap map[string]string, duplicates *[]duplic
 }
 
 func main() {
-<<<<<<< HEAD
 	flag.Parse()
 
 	debugf("debug logging enabled")
@@ -167,10 +166,4 @@ func main() {
 		fmt.Fprintln(os.Stderr, err.Error())
 		os.Exit(1)
 	}
-=======
-	hiddenOpt = flag.Bool("h", false, "Include hidden files")
-	flag.Parse()
-
-	filepath.WalkDir(".", walker)
->>>>>>> a4d049f9bbee93549822a8cefce7935d96f7484c
 }
