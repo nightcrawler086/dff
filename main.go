@@ -15,6 +15,7 @@ import (
 
 var (
 	extList     map[string]struct{}
+	extFlag     = flag.String("ext", "", "comma-separated list of file extensions to include (e.g. .go,.txt). If empty, all files are considered.")
 	debugFlag   = flag.Bool("debug", false, "enable debug logging")
 	machineFlag = flag.Bool("machine", false, "machine-readable output (tab-separated: hash,dupPath,origPath)")
 	workersFlag = flag.Int("workers", 0, "number of worker goroutines (default: logical CPUs)")
@@ -103,8 +104,14 @@ func main() {
 	// Initialize the extList map
 	extList = make(map[string]struct{})
 
-	if flag.NArg() >= 1 {
-		extensions := strings.Split(flag.Arg(0), ",")
+	// Determine extension specification: prefer named flag, fall back to first
+	// positional argument for backward compatibility.
+	extSpec := *extFlag
+	if extSpec == "" && flag.NArg() >= 1 {
+		extSpec = flag.Arg(0)
+	}
+	if extSpec != "" {
+		extensions := strings.Split(extSpec, ",")
 		for _, ext := range extensions {
 			if ext == "" {
 				continue
