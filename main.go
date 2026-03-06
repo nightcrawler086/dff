@@ -97,6 +97,15 @@ func worker(paths <-chan string, fileMap map[string]string, duplicates *[]duplic
 }
 
 func main() {
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: %s [flags] [ext-spec]\n\n", filepath.Base(os.Args[0]))
+		fmt.Fprintln(os.Stderr, "Find duplicate files in the current directory tree by SHA-256 hash.")
+		fmt.Fprintln(os.Stderr, "\nArguments:")
+		fmt.Fprintln(os.Stderr, "  ext-spec  (positional, deprecated) comma-separated extensions, e.g. .go,.txt")
+		fmt.Fprintln(os.Stderr, "\nFlags:")
+		flag.PrintDefaults()
+	}
+
 	flag.Parse()
 
 	debugf("debug logging enabled")
